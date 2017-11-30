@@ -1,0 +1,6 @@
+[package]
+name = "ooulipo"
+version = "0.1.0"
+authors = ["Kay Lovelace <kay@makersacademy.com>"]
+
+[dependencies]
