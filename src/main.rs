@@ -5,66 +5,67 @@ pub enum ASTNode {
     Noop
 }
 
-pub enum Dialogue {
-    Output(String)
+pub enum Action {
+    Print(String),
+    Noop
 }
 
 fn main() {
-        let line_1 = ASTNode::Line {
-            name: String::from("Kay"),
-            message: String::from("Hello"),
-        };
-        let line_2 = ASTNode::Line {
-            name: String::from("Alex"),
-            message: String::from("Hi"),
-        };
-        let lines = vec![line_1, line_2];
-        let dialogue = ASTNode::Dialogue(vec![ASTNode::Dialogue(lines)]);
-
-        play_live(dialogue);
-}
-
-fn play_live(node: ASTNode) {
-    println!("NEW ITERATION: {:?}", node);
-    if (node == ASTNode::Noop) { return }
-    let (response, dialogue) = play(node);
-    match response {
-        Dialogue::Output(message) => {
-            println!("{}", message);
-            play_live(dialogue);
-        }
-    }
+    cli_play(convert(String::from("Kay: Hello\nAlex: Hi")));
 }
 
 fn convert(input: String) -> ASTNode {
-    let mut iter = input.chars();
+    let mut lines = vec![];
+    let mut chars = input.chars().peekable();
 
-    let name: String = iter.by_ref()
-                           .take_while(|ch| *ch != ':')
-                           .collect();
+    while chars.peek() != None {
+        let name: String = chars.by_ref()
+                                .take_while(|ch| *ch != ':')
+                                .collect();
 
-    let message: String = iter.collect();
-    let trimmed_message: String = String::from(message.trim());
+        let message: String = chars.by_ref()
+                                   .take_while(|ch| *ch != '\n')
+                                   .collect();
 
-    return ASTNode::Dialogue(vec![
-        ASTNode::Line { name: name, message: trimmed_message },
-    ]);
+        let trimmed_message: String = String::from(message.trim());
+
+        lines.push(ASTNode::Line { name: name, message: trimmed_message })
+    }
+
+    return ASTNode::Dialogue(lines);
 }
 
-fn play(node: ASTNode) -> (Dialogue, ASTNode) {
-    println!("{:?}", node);
-    return match node {
-        ASTNode::Line { name: n, message: m } => (Dialogue::Output(format!("{} says {}", n, m)), ASTNode::Noop),
-        ASTNode::Noop => panic!("No don't do that :(!!!"),
-        ASTNode::Dialogue(items) => match items.first() {
-            Option::None => (Dialogue::Output(String::from("")), ASTNode::Noop),
-            Option::Some(&ASTNode::Noop) => play(ASTNode::Dialogue(items[1..].to_vec())),
-            Option::Some(item) => {
-                let (dialogue, new_node) = play((*item).clone());
-                return (dialogue, ASTNode::Dialogue([vec![new_node], items[1..].to_vec()].concat()))
-            }
-        }
+fn cli_play(game: ASTNode) {
+    if game == ASTNode::Noop { return }
+    let (response, advanced_game) = advance(game);
+    match response {
+        Action::Print(message) => println!("{}", message),
+        Action::Noop => { }
     }
+    cli_play(advanced_game);
+}
+
+fn advance(node: ASTNode) -> (Action, ASTNode) {
+    return match node {
+        ASTNode::Dialogue(items) => advance_dialogue(items),
+        ASTNode::Line { name, message } => advance_line(name, message),
+        ASTNode::Noop => panic!("Can't advance a noop :("),
+    }
+}
+
+fn advance_dialogue(items: Vec<ASTNode>) -> (Action, ASTNode) {
+    return match items.first() {
+        Option::Some(&ASTNode::Noop) => advance(ASTNode::Dialogue(items[1..].to_vec())),
+        Option::Some(item) => {
+            let (action, advanced_node) = advance((*item).clone());
+            return (action, ASTNode::Dialogue([vec![advanced_node], items[1..].to_vec()].concat()))
+        },
+        Option::None => (Action::Noop, ASTNode::Noop),
+    }
+}
+
+fn advance_line(name: String, message: String) -> (Action, ASTNode) {
+    return (Action::Print(format!("{} says {}", name, message)), ASTNode::Noop);
 }
 
 #[cfg(test)]
@@ -80,9 +81,9 @@ mod tests {
             message: String::from("Hello"),
         };
         let lines = vec![line];
-        let dialogue = ASTNode::Dialogue(lines);
+        let node = ASTNode::Dialogue(lines);
 
-        assert!(result == dialogue);
+        assert_eq!(result, node);
     }
 
     #[test]
@@ -96,16 +97,16 @@ mod tests {
             message: String::from("Hi"),
         };
         let lines = vec![line_1, line_2];
-        let dialogue = ASTNode::Dialogue(lines);
+        let node = ASTNode::Dialogue(lines);
 
 
-        let next_step_1 = play(dialogue);
+        let next_step_1 = advance(node);
         match next_step_1 {
-            (Dialogue::Output(string), dialogue_2) => {
+            (Action::Print(string), dialogue_2) => {
                 assert_eq!("Kay says Hello", string);
-                let next_step_2 = play(dialogue_2);
+                let next_step_2 = advance(dialogue_2);
                 match next_step_2 {
-                    (Dialogue::Output(string), _) => assert_eq!("Alex says Hi", string),
+                    (Action::Print(string), _) => assert_eq!("Alex says Hi", string),
                     (_, _) => ()
                 }
             },
@@ -124,16 +125,16 @@ mod tests {
             message: String::from("Hi"),
         };
         let lines = vec![line_1, line_2];
-        let dialogue = ASTNode::Dialogue(vec![ASTNode::Dialogue(lines)]);
+        let node = ASTNode::Dialogue(vec![ASTNode::Dialogue(lines)]);
 
 
-        let next_step_1 = play(dialogue);
+        let next_step_1 = advance(node);
         match next_step_1 {
-            (Dialogue::Output(string), dialogue_2) => {
+            (Action::Print(string), dialogue_2) => {
                 assert_eq!("Kay says Hello", string);
-                let next_step_2 = play(dialogue_2);
+                let next_step_2 = advance(dialogue_2);
                 match next_step_2 {
-                    (Dialogue::Output(string), _) => assert_eq!("Alex says Hi", string),
+                    (Action::Print(string), _) => assert_eq!("Alex says Hi", string),
                     (_, _) => panic!("Can't do this!")
                 }
             },
